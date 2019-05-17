@@ -1,0 +1,330 @@
+# _*_ coding:utf-8 _*_
+import numpy as np
+import cv2
+import os
+import shutil
+
+
+class FrameSelectionDataExpension():
+    def __init__(self,data_path='./hand_80',align_path='./align_80',frames_len=17,categories=8):
+        self.data_path=data_path
+        self.frames_len=frames_len
+        self.align_path=align_path
+        self.categories=categories
+
+        if not os.path.exists(self.align_path):
+            os.mkdir(self.align_path)
+    #获取间隔
+    def get_Interval(self, true_frames):
+        rate = true_frames // self.frames_len
+        if rate >= 1:
+            return rate
+        else:
+            return int(1)
+
+    #单个视频文件转化为图片
+    def single_Trans(self,video_path,target_path,frame_count=1):
+        '''
+
+        :param video_name:
+        :param target_path:
+        :param frame_count: 默认最小值为1，可以取2，3，4等用于扩充数据（选取不同帧）
+        :return:
+        '''
+        if not os.path.exists(target_path):
+            os.mkdir(target_path)
+        #get video len
+        cap=cv2.VideoCapture(video_path)
+        frames_len=cap.get(cv2.CAP_PROP_FRAME_COUNT)
+
+        interval=self.get_Interval(frames_len)
+        #cap.set(cv2.CAP_PROP_POS_FRAMES, 2*interval+1)
+        #print(interval)
+        #read video
+        img_count = 1
+        while(cap.isOpened()):
+            #read frames
+            _,frame=cap.read()
+            #当进入如下判断语句时，通常差一张图片
+            if frame is None:
+                if img_count==self.frames_len:
+                    #frames_len-1 是最后一张图片
+                    cap.set(cv2.CAP_PROP_POS_FRAMES, frames_len-1)
+                    _,frame=cap.read()
+                    shape = frame.shape
+                    # 裁剪 frame[x0:x1,y0:y1] 笛卡尔坐标系
+                    img_crop = frame[0:shape[0], (shape[1] - shape[0]) // 2:(shape[1] - shape[0]) // 2 + shape[0]]
+                    gray = cv2.cvtColor(img_crop, cv2.COLOR_BGR2GRAY)
+                    resize_gray = cv2.resize(gray, dsize=(128, 128))
+                    target_curr_path = os.path.join(target_path, str(img_count) + '.png')
+                    cv2.imwrite(target_curr_path, resize_gray)
+                    cap.release()
+                    cv2.destroyAllWindows()
+                    break
+                elif img_count==self.frames_len-1:
+                    cap.set(cv2.CAP_PROP_POS_FRAMES, frames_len - interval//2)
+                    _, frame = cap.read()
+                    shape = frame.shape
+                    # 裁剪 frame[x0:x1,y0:y1] 笛卡尔坐标系
+                    img_crop = frame[0:shape[0], (shape[1] - shape[0]) // 2:(shape[1] - shape[0]) // 2 + shape[0]]
+                    gray = cv2.cvtColor(img_crop, cv2.COLOR_BGR2GRAY)
+                    resize_gray = cv2.resize(gray, dsize=(128, 128))
+                    target_curr_path = os.path.join(target_path, str(img_count) + '.png')
+                    cv2.imwrite(target_curr_path, resize_gray)
+
+                    img_count+=1
+                    cap.set(cv2.CAP_PROP_POS_FRAMES, frames_len - 1)
+                    _, frame = cap.read()
+                    shape = frame.shape
+                    # 裁剪 frame[x0:x1,y0:y1] 笛卡尔坐标系
+                    img_crop = frame[0:shape[0], (shape[1] - shape[0]) // 2:(shape[1] - shape[0]) // 2 + shape[0]]
+                    gray = cv2.cvtColor(img_crop, cv2.COLOR_BGR2GRAY)
+                    resize_gray = cv2.resize(gray, dsize=(128, 128))
+                    target_curr_path = os.path.join(target_path, str(img_count) + '.png')
+                    cv2.imwrite(target_curr_path, resize_gray)
+                    cap.release()
+                    cv2.destroyAllWindows()
+                    break
+                else:
+                    raise RuntimeError('Error happened!!!')
+            #cv2.imshow('frame',gray)
+            # if cv2.waitKey(1)&0xFF==ord('q'):
+            #     break
+            if frame_count%interval==0:
+                shape=frame.shape
+                #裁剪 frame[x0:x1,y0:y1] 笛卡尔坐标系
+                img_crop=frame[0:shape[0],(shape[1]-shape[0])//2:(shape[1]-shape[0])//2+shape[0]]
+                gray = cv2.cvtColor(img_crop, cv2.COLOR_BGR2GRAY)
+                resize_gray=cv2.resize(gray,dsize=(128,128))
+                target_curr_path=os.path.join(target_path,str(img_count)+'.png')
+                cv2.imwrite(target_curr_path,resize_gray)
+                img_count+=1
+            if img_count==self.frames_len+1:
+                cap.release()
+                cv2.destroyAllWindows()
+                break
+            frame_count+=1
+
+    #遍历视频，帧选取转化视频并扩充数据集
+    def frame_selection_expension(self,frame_count):
+        '''
+
+        :param frame_count: list [] example:[1,2,3,4]
+        :return:
+        '''
+        categorys_list=os.listdir(self.data_path)
+        if len(os.listdir(self.align_path))==self.categories:
+            print('frame_selection_expension successfully!!!')
+            return
+        for i in range(self.categories):
+            categorys_align_path=os.path.join(self.align_path,categorys_list[i])
+            if not os.path.exists(categorys_align_path):
+                os.mkdir(categorys_align_path)
+
+            categorys_src_path = os.path.join(self.data_path, categorys_list[i])
+            sample_src_list=os.listdir(categorys_src_path)
+            sample_src_len=len(sample_src_list)
+            for j in range(sample_src_len):
+                sample_align_path=os.path.join(categorys_align_path,sample_src_list[j][:-4])   #[:-4] for remove .MP4
+
+
+                sample_src_path=os.path.join(categorys_src_path,sample_src_list[j])
+
+                for k in range(len(frame_count)):
+                    self.single_Trans(sample_src_path,sample_align_path+'_'+str(k),frame_count[k])
+
+class TestDataRandomDivision(FrameSelectionDataExpension):
+    def __init__(self,test_path='./test_80',category_test_num=8):
+        super(TestDataRandomDivision,self).__init__()
+        #帧选取扩增4次，故定义
+        times=range(1,5)
+        self.frame_selection_expension(times)
+
+        #每个分类的测试集样本数量
+        self.category_test_num=category_test_num
+        self.test_path=test_path
+        if not os.path.exists(self.test_path):
+            os.mkdir(self.test_path)
+
+    #单个测试集文件夹移动至测试集目录
+    def single_Move(self,src_path,target_path):
+        if os.path.exists(target_path):
+            shutil.rmtree(target_path)
+        #move src dir to target path
+        shutil.move(src_path,target_path)
+
+    #全部测试集文件选取及以移动
+    def test_Selection(self):
+        categories_list=os.listdir(self.align_path)
+        if len(os.listdir(self.test_path))==self.categories:
+            print('test division successfully!!!')
+            return
+        for i in range(self.categories):
+            categories_test_path=os.path.join(self.test_path,categories_list[i])
+            if not os.path.exists(categories_test_path):
+                os.mkdir(categories_test_path)
+
+            categories_src_path=os.path.join(self.align_path,categories_list[i])
+            sample_src_list=os.listdir(categories_src_path)
+            sample_src_len=len(sample_src_list)
+            #取前四个随机索引
+            random_index=np.random.permutation(sample_src_len)[:self.category_test_num]
+            for j in range(self.category_test_num):
+                sample_src_path=os.path.join(categories_src_path,sample_src_list[random_index[j]])
+                sample_test_path=os.path.join(categories_test_path,sample_src_list[random_index[j]])
+                self.single_Move(sample_src_path,sample_test_path)
+
+class BrightnessConversionExpansion(TestDataRandomDivision):
+    def __init__(self):
+        super(BrightnessConversionExpansion,self).__init__()
+        #用于测试集切割
+        self.test_Selection()
+
+    #给定单个亮度值对数据进行转换
+    def single_Bright_Trans(self,src_path,target_path,bright=1.1):
+        '''
+
+        :param src_path
+        :param target_path
+        :param bright:亮度百分比增强或者削弱 example:1.1==>assert int(v channels  * bright) <=255
+                0.5<bright<1.5
+        :return:
+        '''
+        if not os.path.exists(target_path):
+            os.mkdir(target_path)
+        sample_imgs_list=os.listdir(src_path)
+        for i in range(len(sample_imgs_list)):
+            sample_img_path=os.path.join(src_path,sample_imgs_list[i])
+            item_original_img=cv2.imread(sample_img_path)
+
+            sample_target_path=os.path.join(target_path,sample_imgs_list[i])
+
+            item_target_img=np.multiply(item_original_img,bright)
+            item_target_img=np.where(item_target_img>255,255,item_target_img)
+            item_target_img=item_target_img.astype(np.uint8)
+            cv2.imwrite(sample_target_path,item_target_img)
+
+    #对所有样本进行11倍扩充
+    def bright_conversion_Expansion(self,bright):
+        categories_list=os.listdir(self.align_path)
+
+        for i in range(len(categories_list)):
+            categories_path=os.path.join(self.align_path,categories_list[i])
+            samples_list=os.listdir(categories_path)
+            samples_len=len(samples_list)
+
+            for j in range(samples_len):
+                samples_src_path=os.path.join(categories_path,samples_list[j])
+
+                for k in range(len(bright)):
+                    samples_target_path=os.path.join(categories_path,samples_list[j]+'_b'+str(bright[k]))
+                    self.single_Bright_Trans(samples_src_path,samples_target_path,bright[k])
+
+class HorizontalFlipExpansion(TestDataRandomDivision):
+    def __init__(self):
+        super(HorizontalFlipExpansion,self).__init__()
+        # 用于测试集切割
+        self.test_Selection()
+
+    def single_Flip_Trans(self,src_path,target_path,state=1):
+        '''
+
+        :param src_path:
+        :param target_path:
+        :param state: 1 为水平翻转  0为垂直翻转 -1为对角翻转
+        :return:
+        '''
+        if not os.path.exists(target_path):
+            os.mkdir(target_path)
+
+        sample_imgs_list=os.listdir(src_path)
+        for i in range(len(sample_imgs_list)):
+            sample_img_path=os.path.join(src_path,sample_imgs_list[i])
+            item_original_img=cv2.imread(sample_img_path)
+
+            sample_target_path=os.path.join(target_path,sample_imgs_list[i])
+            item_target_img=cv2.flip(item_original_img,state,dst=None)
+            cv2.imwrite(sample_target_path,item_target_img)
+
+    def horizontal_flip_Expansion(self,state):
+
+        categories_list = os.listdir(self.align_path)
+
+        for i in range(len(categories_list)):
+            categories_path = os.path.join(self.align_path, categories_list[i])
+            samples_list = os.listdir(categories_path)
+            samples_len = len(samples_list)
+
+            for j in range(samples_len):
+                samples_src_path = os.path.join(categories_path, samples_list[j])
+
+                for k in range(len(state)):
+                    samples_target_path = os.path.join(categories_path, samples_list[j] + '_f' + str(state[k]))
+                    self.single_Flip_Trans(samples_src_path, samples_target_path, state[k])
+
+
+class AddNoiseExpansion(TestDataRandomDivision):
+    def __init__(self):
+        super(AddNoiseExpansion,self).__init__()
+        # 用于测试集切割
+        self.test_Selection()
+
+    #增加高斯噪声
+    def single_Add_Noise(self,src_path,target_path,mean=0,var=0.1):
+        if not os.path.exists(target_path):
+            os.mkdir(target_path)
+
+        sample_imgs_list=os.listdir(src_path)
+        for i in range(len(sample_imgs_list)):
+            sample_img_path=os.path.join(src_path,sample_imgs_list[i])
+            item_original_img=cv2.imread(sample_img_path)
+            item_tmp_img=np.array(item_original_img/255,dtype=np.float32)
+            item_noise=np.random.normal(mean,var,item_tmp_img.shape)
+            item_tmp_img=item_tmp_img+item_noise
+            if item_tmp_img.min()<0:
+                low_clip=0
+            else:
+                low_clip=0
+            item_tmp_img=np.clip(item_tmp_img,low_clip,1.0)
+            item_target_img=np.uint8(item_tmp_img*255)
+
+            sample_target_path=os.path.join(target_path,sample_imgs_list[i])
+            cv2.imwrite(sample_target_path,item_target_img)
+
+    def add_noise_expansion(self):
+        categories_list = os.listdir(self.align_path)
+
+        for i in range(len(categories_list)):
+            categories_path = os.path.join(self.align_path, categories_list[i])
+            samples_list = os.listdir(categories_path)
+            samples_len = len(samples_list)
+
+            for j in range(samples_len):
+                samples_src_path = os.path.join(categories_path, samples_list[j])
+
+                #for k in range(len(state)):
+                samples_target_path = os.path.join(categories_path, samples_list[j] + '_gauss')
+                self.single_Add_Noise(samples_src_path, samples_target_path)
+
+
+if __name__=='__main__':
+    '''
+    下列部分用于，根据明暗度灰度级变化来扩增数据集，当前已执行
+    同时对之前的选取和切分操作进行检查，是否已执行，未执行会执行前面的操作
+    '''
+    # bce=BrightnessConversionExpansion()
+    # # 0.5-1.5  灰度级变化
+    # bright = [0.5 + i * 0.1 for i in range(11)]
+    # bce.bright_conversion_Expansion(bright)
+    '''
+    下列部分用于，根据图片的翻转变化来扩增数据集，当前已执行
+    '''
+    # hfe=HorizontalFlipExpansion()
+    # #hfe.single_Flip_Trans('./align_80/1/MAH01465_3','./test')
+    # state=[-1,0,1]
+    # hfe.horizontal_flip_Expansion(state)
+    '''
+    下列部分用于，给图片添加噪声点 扩增数据集，当前已执行·
+    '''
+    # ane=AddNoiseExpansion()
+    # ane.add_noise_expansion()
