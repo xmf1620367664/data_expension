@@ -42,9 +42,11 @@ class FrameSelectionDataExpension():
         #print(interval)
         #read video
         img_count = 1
+        random_inter=0
         while(cap.isOpened()):
             #read frames
             _,frame=cap.read()
+
             #当进入如下判断语句时，通常差一张图片
             if frame is None:
                 if img_count==self.frames_len:
@@ -90,7 +92,8 @@ class FrameSelectionDataExpension():
             #cv2.imshow('frame',gray)
             # if cv2.waitKey(1)&0xFF==ord('q'):
             #     break
-            if frame_count%interval==0:
+
+            if frame_count%interval==random_inter:
                 shape=frame.shape
                 #裁剪 frame[x0:x1,y0:y1] 笛卡尔坐标系
                 img_crop=frame[0:shape[0],(shape[1]-shape[0])//2:(shape[1]-shape[0])//2+shape[0]]
@@ -99,6 +102,7 @@ class FrameSelectionDataExpension():
                 target_curr_path=os.path.join(target_path,str(img_count)+'.png')
                 cv2.imwrite(target_curr_path,resize_gray)
                 img_count+=1
+                random_inter = np.random.randint(0, interval)
             if img_count==self.frames_len+1:
                 cap.release()
                 cv2.destroyAllWindows()
@@ -167,12 +171,13 @@ class TestDataRandomDivision(FrameSelectionDataExpension):
             categories_src_path=os.path.join(self.align_path,categories_list[i])
             sample_src_list=os.listdir(categories_src_path)
             sample_src_len=len(sample_src_list)
-            #取前四个随机索引
-            random_index=np.random.permutation(sample_src_len)[:self.category_test_num]
-            for j in range(self.category_test_num):
-                sample_src_path=os.path.join(categories_src_path,sample_src_list[random_index[j]])
-                sample_test_path=os.path.join(categories_test_path,sample_src_list[random_index[j]])
-                self.single_Move(sample_src_path,sample_test_path)
+            #取前2个随机索引
+            random_index=np.random.permutation(sample_src_len)[:2]
+            for k in range(2):
+                for j in range(4):
+                    sample_src_path=os.path.join(categories_src_path,sample_src_list[random_index[k]][:-1]+str(j))
+                    sample_test_path=os.path.join(categories_test_path,sample_src_list[random_index[k]][:-1]+str(j))
+                    self.single_Move(sample_src_path,sample_test_path)
 
 class BrightnessConversionExpansion(TestDataRandomDivision):
     def __init__(self):
@@ -204,7 +209,7 @@ class BrightnessConversionExpansion(TestDataRandomDivision):
             item_target_img=item_target_img.astype(np.uint8)
             cv2.imwrite(sample_target_path,item_target_img)
 
-    #对所有样本进行11倍扩充
+    #对所有样本进行5倍扩充
     def bright_conversion_Expansion(self,bright):
         categories_list=os.listdir(self.align_path)
 
@@ -270,7 +275,8 @@ class AddNoiseExpansion(TestDataRandomDivision):
         self.test_Selection()
 
     #增加高斯噪声
-    def single_Add_Noise(self,src_path,target_path,mean=0,var=0.1):
+    def single_Add_Noise(self,src_path,target_path,mean=0,var=0.01):
+        var=np.random.randint(1,20)*0.01
         if not os.path.exists(target_path):
             os.mkdir(target_path)
 
@@ -291,6 +297,33 @@ class AddNoiseExpansion(TestDataRandomDivision):
             sample_target_path=os.path.join(target_path,sample_imgs_list[i])
             cv2.imwrite(sample_target_path,item_target_img)
 
+    #增加椒盐噪声
+    def single_Add_Salt(self,src_path,target_path,base_num=1300):
+        if not os.path.exists(target_path):
+            os.mkdir(target_path)
+
+        sample_imgs_list=os.listdir(src_path)
+        for i in range(len(sample_imgs_list)):
+            sample_img_path=os.path.join(src_path,sample_imgs_list[i])
+            item_original_img=cv2.imread(sample_img_path)
+            #item_tmp_img=np.array(item_original_img/255,dtype=np.float32)
+            #item_noise=np.random.normal(mean,var,item_tmp_img.shape)
+            #item_tmp_img=item_tmp_img+item_noise
+            img_shape=item_original_img.shape
+            salt_num=int(np.random.randn()*base_num)
+            for j in range(salt_num):
+                x=np.random.randint(0,img_shape[0])
+                y=np.random.randint(0,img_shape[1])
+                random_seed=int(np.random.randn()*2)
+                if random_seed==0:
+                    item_original_img[x,y]=0
+                else:
+                    item_original_img[x,y]=255
+
+            sample_target_path=os.path.join(target_path,sample_imgs_list[i])
+            item_target_img=item_original_img
+            cv2.imwrite(sample_target_path,item_target_img)
+
     def add_noise_expansion(self):
         categories_list = os.listdir(self.align_path)
 
@@ -306,25 +339,32 @@ class AddNoiseExpansion(TestDataRandomDivision):
                 samples_target_path = os.path.join(categories_path, samples_list[j] + '_gauss')
                 self.single_Add_Noise(samples_src_path, samples_target_path)
 
+                samples_target_path_2=os.path.join(categories_path,samples_list[j]+'_salt')
+                self.single_Add_Salt(samples_src_path,samples_target_path_2)
+
 
 if __name__=='__main__':
+    #fsd=FrameSelectionDataExpension()
+    #fsd.single_Trans('./hand_80/1/MAH01465.MP4','./test')
     '''
     下列部分用于，根据明暗度灰度级变化来扩增数据集，当前已执行
     同时对之前的选取和切分操作进行检查，是否已执行，未执行会执行前面的操作
     '''
-    # bce=BrightnessConversionExpansion()
-    # # 0.5-1.5  灰度级变化
-    # bright = [0.5 + i * 0.1 for i in range(11)]
-    # bce.bright_conversion_Expansion(bright)
+    bce=BrightnessConversionExpansion()
+    # 0.5-1.5  灰度级变化
+    bright = [0.5 + i * 0.2 for i in range(6)]
+    bce.bright_conversion_Expansion(bright)
     '''
     下列部分用于，根据图片的翻转变化来扩增数据集，当前已执行
+    0为垂直翻转，-1为对角翻转，1为水平翻转
     '''
-    # hfe=HorizontalFlipExpansion()
-    # #hfe.single_Flip_Trans('./align_80/1/MAH01465_3','./test')
-    # state=[-1,0,1]
-    # hfe.horizontal_flip_Expansion(state)
+    hfe=HorizontalFlipExpansion()
+    #hfe.single_Flip_Trans('./align_80/1/MAH01465_3','./test')
+    state=[0]
+    hfe.horizontal_flip_Expansion(state)
     '''
     下列部分用于，给图片添加噪声点 扩增数据集，当前已执行·
     '''
-    # ane=AddNoiseExpansion()
-    # ane.add_noise_expansion()
+    ane=AddNoiseExpansion()
+    #ane.single_Add_Salt('./align_80/1/MAH01465_3','./test')
+    ane.add_noise_expansion()
